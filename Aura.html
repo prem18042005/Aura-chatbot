@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open Innovation | Real-time AI Companion</title>
+    
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #050510;
+            --panel-bg: rgba(20, 20, 35, 0.7);
+            --accent-primary: #00f2ff; /* Cyan */
+            --accent-secondary: #7000ff; /* Purple */
+            --accent-listening: #ff9d00; /* Orange */
+            --text-main: #ffffff;
+            --text-muted: #a0a0b0;
+            --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            overflow: hidden; /* Prevent scroll, full app feel */
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- Header --- */
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+            pointer-events: none; /* Let clicks pass through to 3D where needed */
+        }
+
+        .brand {
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .brand h1 {
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--text-main));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        
+        .brand span {
+            font-size: 0.8rem;
+            color: var(--accent-secondary);
+            letter-spacing: 4px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--panel-bg);
+            padding: 8px 16px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: auto;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #555;
+            box-shadow: 0 0 5px #555;
+            transition: all 0.3s ease;
+        }
+
+        .status-text {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        /* --- Main Layout --- */
+        main {
+            flex: 1;
+            display: flex;
+            position: relative;
+            height: 100%;
+        }
+
+        /* 3D Canvas Container */
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* UI Overlay Layer */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 2rem;
+            pointer-events: none; /* Allow clicking through to canvas */
+        }
+
+        /* Chat Interface */
+        .chat-interface {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            background: var(--panel-bg);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            pointer-events: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: transform 0.3s ease;
+        }
+
+        .chat-log {
+            height: 250px;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        /* Scrollbar styling */
+        .chat-log::-webkit-scrollbar {
+            width: 6px;
+        }
+        .chat-log::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            line-height: 1.4;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            border-bottom-right-radius: 2px;
+        }
+
+        .message.ai {
+            align-self: flex-start;
+            background: rgba(0, 242, 255, 0.15);
+            border: 1px solid rgba(0, 242, 255, 0.3);
+            color: var(--text-main);
+            border-bottom-left-radius: 2px;
+        }
+
+        .controls {
+            padding: 1rem;
+            background: rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+
+        input[type="text"] {
+            flex: 1;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 12px 15px;
+            border-radius: 25px;
+            color: white;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--accent-primary);
+        }
+
+        .btn-mic {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, var(--accent-secondary), #4a00e0);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(112, 0, 255, 0.4);
+        }
+
+        .btn-mic:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(112, 0, 255, 0.6);
+        }
+
+        .btn-mic.listening {
+            background: var(--accent-listening);
+            animation: pulse 1.5s infinite;
+        }
+
+        /* SVG Icons */
+        .icon {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        /* --- Start Overlay --- */
+        #start-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(5, 5, 16, 0.95);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            transition: opacity 0.5s ease;
+        }
+
+        #start-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .start-btn {
+            margin-top: 2rem;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            background: transparent;
+            color: var(--accent-primary);
+            border: 2px solid var(--accent-primary);
+            border-radius: 30px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s;
+        }
+
+        .start-btn:hover {
+            background: var(--accent-primary);
+            color: black;
+            box-shadow: 0 0 20px var(--accent-primary);
+        }
+
+        /* --- Animations --- */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 157, 0, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 157, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 157, 0, 0); }
+        }
+
+        /* --- Mobile Responsiveness --- */
+        @media (max-width: 768px) {
+            .chat-interface {
+                width: 100%;
+                margin-bottom: 0;
+                border-bottom-left-radius: 0;
+                border-bottom-right-radius: 0;
+            }
+            .chat-log {
+                height: 200px;
+            }
+            header {
+                padding: 1rem;
+            }
+            .brand h1 { font-size: 1.2rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Start Overlay for Audio Context -->
+    <div id="start-overlay">
+        <div class="brand" style="align-items: center; margin-bottom: 1rem;">
+            <h1>AURA</h1>
+            <span>AI Companion</span>
+        </div>
+        <p style="color: var(--text-muted); max-width: 400px; padding: 0 20px;">
+            Experience real-time 3D avatar interaction. <br>
+            Please allow microphone access for voice commands.
+        </p>
+        <button class="start-btn" id="init-btn">Initialize System</button>
+    </div>
+
+    <header>
+        <div class="brand">
+            <h1>AURA</h1>
+            <span>Open Innovation</span>
+        </div>
+        <div class="status-indicator">
+            <div class="status-dot" id="status-dot"></div>
+            <div class="status-text" id="status-text">OFFLINE</div>
+        </div>
+    </header>
+
+    <main>
+        <!-- 3D Scene Container -->
+        <div id="canvas-container"></div>
+
+        <!-- UI Overlay -->
+        <div class="ui-layer">
+            <div class="chat-interface">
+                <div class="chat-log" id="chat-log">
+                    <div class="message ai">
+                        System initialized. I am Aura, your real-time AI companion. How can I assist you with your innovation project today?
+                    </div>
+                </div>
+                <div class="controls">
+                    <button class="btn-mic" id="mic-btn" title="Hold to Speak">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                        </svg>
+                    </button>
+                    <input type="text" id="text-input" placeholder="Type a message or use voice..." autocomplete="off">
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        /**
+         * APPLICATION STATE & CONFIGURATION
+         */
+        const state = {
+            isListening: false,
+            isSpeaking: false,
+            isProcessing: false,
+            voiceEnabled: false
+        };
+
+        const colors = {
+            idle: 0x00f2ff,      // Cyan
+            listening: 0xff9d00, // Orange
+            processing: 0x7000ff,// Purple
+            speaking: 0x00ff88   // Green
+        };
+
+        // DOM Elements
+        const chatLog = document.getElementById('chat-log');
+        const textInput = document.getElementById('text-input');
+        const micBtn = document.getElementById('mic-btn');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const startOverlay = document.getElementById('start-overlay');
+        const initBtn = document.getElementById('init-btn');
+
+        /**
+         * THREE.JS 3D SCENE SETUP
+         */
+        const scene = new THREE.Scene();
+        // Add subtle fog for depth
+        scene.fog = new THREE.FogExp2(0x050510, 0.02);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 5;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(colors.idle, 2, 50);
+        pointLight.position.set(2, 3, 4);
+        scene.add(pointLight);
+        
+        const rimLight = new THREE.PointLight(0x7000ff, 2, 20);
+        rimLight.position.set(-5, 0, -5);
+        scene.add(rimLight);
+
+        // --- Avatar Construction (Procedural Robot Head) ---
+        const avatarGroup = new THREE.Group();
+        scene.add(avatarGroup);
+
+        // 1. Core Head (Sphere)
+        const headGeometry = new THREE.IcosahedronGeometry(1.2, 1);
+        const headMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x222222, 
+            roughness: 0.2, 
+            metalness: 0.8,
+            flatShading: true 
+        });
+        const head = new THREE.Mesh(headGeometry, headMaterial);
+        avatarGroup.add(head);
+
+        // 2. Glowing Eyes (Torus)
+        const eyeGeometry = new THREE.TorusGeometry(0.35, 0.05, 16, 50);
+        const eyeMaterial = new THREE.MeshBasicMaterial({ color: colors.idle });
+        
+        const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        leftEye.position.set(-0.4, 0.1, 1.0);
+        avatarGroup.add(leftEye);
+
+        const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        rightEye.position.set(0.4, 0.1, 1.0);
+        avatarGroup.add(rightEye);
+
+        // 3. Floating Rings (Orbitals)
+        const ringGeo = new THREE.TorusGeometry(1.8, 0.02, 16, 100);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.5 });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = Math.PI / 2;
+        avatarGroup.add(ring);
+
+        // 4. Background Particles
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 700;
+        const posArray = new Float32Array(particlesCount * 3);
+
+        for(let i = 0; i < particlesCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 20; // Spread within 20 units
+        }
+
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const particlesMaterial = new THREE.PointsMaterial({
+            size: 0.02,
+            color: colors.idle,
+            transparent: true,
+            opacity: 0.8
+        });
+        const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particlesMesh);
+
+        /**
+         * ANIMATION & INTERACTION LOOP
+         */
+        let mouseX = 0;
+        let mouseY = 0;
+        let targetRotationX = 0;
+        let targetRotationY = 0;
+
+        // Mouse tracking for avatar look-at
+        document.addEventListener('mousemove', (event) => {
+            mouseX = (event.clientX - window.innerWidth / 2) * 0.001;
+            mouseY = (event.clientY - window.innerHeight / 2) * 0.001;
+        });
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+
+            // Idle Animation: Float up and down
+            avatarGroup.position.y = Math.sin(time) * 0.1;
+
+            // Look at mouse logic (Smooth damping)
+            targetRotationX = mouseY * 2;
+            targetRotationY = mouseX * 2;
+            avatarGroup.rotation.x += 0.05 * (targetRotationX - avatarGroup.rotation.x);
+            avatarGroup.rotation.y += 0.05 * (targetRotationY - avatarGroup.rotation.y);
+
+            // Rotate outer rings
+            ring.rotation.x += 0.005;
+            ring.rotation.y += 0.005;
+
+            // Speaking Simulation (Wobble eyes)
+            if (state.isSpeaking) {
+                const scale = 1 + Math.sin(time * 20) * 0.1;
+                leftEye.scale.set(scale, scale, scale);
+                rightEye.scale.set(scale, scale, scale);
+                particlesMesh.rotation.y += 0.01;
+            } else {
+                leftEye.scale.set(1, 1, 1);
+                rightEye.scale.set(1, 1, 1);
+            }
+
+            // Listening Simulation (Color Pulse)
+            if (state.isListening) {
+                const pulse = (Math.sin(time * 10) + 1) / 2; // 0 to 1
+                eyeMaterial.color.setHex(colors.listening);
+                pointLight.intensity = 1 + pulse * 2;
+            } else {
+                eyeMaterial.color.setHex(colors.idle);
+                pointLight.intensity = 2;
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Window resize handling
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        /**
+         * AVATAR STATE MANAGER
+         */
+        function setAvatarState(newState) {
+            // Reset all states
+            state.isListening = false;
+            state.isProcessing = false;
+            state.isSpeaking = false;
+            micBtn.classList.remove('listening');
+
+            switch(newState) {
+                case 'listening':
+                    state.isListening = true;
+                    statusDot.style.backgroundColor = 'var(--accent-listening)';
+                    statusDot.style.boxShadow = '0 0 10px var(--accent-listening)';
+                    statusText.textContent = "LISTENING";
+                    statusText.style.color = 'var(--accent-listening)';
+                    micBtn.classList.add('listening');
+                    eyeMaterial.color.setHex(colors.listening);
+                    break;
+                case 'processing':
+                    state.isProcessing = true;
+                    statusDot.style.backgroundColor = 'var(--accent-secondary)';
+                    statusDot.style.boxShadow = '0 0 10px var(--accent-secondary)';
+                    statusText.textContent = "PROCESSING";
+                    statusText.style.color = 'var(--accent-secondary)';
+                    eyeMaterial.color.setHex(colors.processing);
+                    break;
+                case 'speaking':
+                    state.isSpeaking = true;
+                    statusDot.style.backgroundColor = '#00ff88';
+                    statusDot.style.boxShadow = '0 0 10px #00ff88';
+                    statusText.textContent = "SPEAKING";
+                    statusText.style.color = '#00ff88';
+                    eyeMaterial.color.setHex(colors.speaking);
+                    break;
+                case 'idle':
+                default:
+                    statusDot.style.backgroundColor = '#555';
+                    statusDot.style.boxShadow = '0 0 5px #555';
+                    statusText.textContent = "ONLINE";
+                    statusText.style.color = 'var(--text-muted)';
+                    eyeMaterial.color.setHex(colors.idle);
+                    break;
+            }
+        }
+
+        /**
+         * VOICE & AI LOGIC
+         */
+        
+        // Initialize Speech Recognition
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false; // Stop after one sentence
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+
+            recognition.onstart = () => {
+                setAvatarState('listening');
+            };
+
+            recognition.onend = () => {
+                if(!state.isSpeaking) setAvatarState('idle');
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                addMessage(transcript, 'user');
+                processAIResponse(transcript);
+            };
+
+            recognition.onerror = (event) => {
+                console.error("Speech recognition error", event.error);
+                setAvatarState('idle');
+                if (event.error === 'not-allowed') {
+                    addMessage("Microphone access denied. Please use text input.", 'ai');
+                }
+            };
+        } else {
+            micBtn.style.display = 'none';
+            addMessage("Voice recognition not supported in this browser. Please use text input.", 'ai');
+        }
+
+        // Initialize Speech Synthesis
+        const synth = window.speechSynthesis;
+
+        function speak(text) {
+            if (synth.speaking) {
+                console.error('speechSynthesis.speaking');
+                return;
+            }
+            if (text !== '') {
+                setAvatarState('speaking');
+                const utterThis = new SpeechSynthesisUtterance(text);
+                
+                // Attempt to find a "tech" sounding voice
+                const voices = synth.getVoices();
+                const preferredVoice = voices.find(v => v.name.includes('Google US English') || v.name.includes('Samantha'));
+                if(preferredVoice) utterThis.voice = preferredVoice;
+
+                utterThis.pitch = 1;
+                utterThis.rate = 1;
+
+                utterThis.onend = function (event) {
+                    setAvatarState('idle');
+                };
+
+                utterThis.onerror = function (event) {
+                    console.error('SpeechSynthesisUtterance.onerror');
+                    setAvatarState('idle');
+                };
+
+                synth.speak(utterThis);
+            }
+        }
+
+        // Simple Keyword-based AI Logic
+        function processAIResponse(input) {
+            setAvatarState('processing');
+            
+            const lowerInput = input.toLowerCase();
+            let responseText = "";
+
+            // Simulate processing delay
+            setTimeout(() => {
+                if (lowerInput.includes('hello') || lowerInput.includes('hi')) {
+                    responseText = "Greetings. I am ready to innovate with you.";
+                } else if (lowerInput.includes('how are you')) {
+                    responseText = "My systems are operating at 100% efficiency. Thank you for asking.";
+                } else if (lowerInput.includes('innovation') || lowerInput.includes('idea')) {
+                    responseText = "Innovation requires combining existing concepts in novel ways. What specific field are you interested in?";
+                } else if (lowerInput.includes('avatar') || lowerInput.includes('3d')) {
+                    responseText = "I am a WebGL-based construct, rendered directly in your browser using Three.js technology.";
+                } else if (lowerInput.includes('help')) {
+                    responseText = "I can assist with brainstorming, technical concepts, or just conversation. Ask me about the future of technology.";
+                } else {
+                    responseText = "I've processed that input. Could you elaborate on how it relates to our current project goals?";
+                }
+
+                addMessage(responseText, 'ai');
+                speak(responseText);
+
+            }, 1000 + Math.random() * 1000);
+        }
+
+        /**
+         * UI LOGIC
+         */
+        function addMessage(text, sender) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('message', sender);
+            msgDiv.textContent = text;
+            chatLog.appendChild(msgDiv);
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+
+        // Mic Button Handling
+        micBtn.addEventListener('mousedown', () => {
+            if (recognition) {
+                try {
+                    recognition.start();
+                } catch(e) {
+                    // Usually if already started
+                    recognition.stop();
+                }
+            }
+        });
+
+        // Text Input Handling
+        textInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && textInput.value.trim() !== "") {
+                const text = textInput.value.trim();
+                addMessage(text, 'user');
+                textInput.value = '';
+                processAIResponse(text);
+            }
+        });
+
+        // Initialization
+        initBtn.addEventListener('click', () => {
+            startOverlay.classList.add('hidden');
+            setAvatarState('idle');
+            
+            // Load voices for synthesis
+            window.speechSynthesis.getVoices();
+        });
+
+    </script>
+</body>
+</html>
